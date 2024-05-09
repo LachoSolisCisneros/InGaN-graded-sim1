@@ -1,0 +1,88 @@
+#### This code has been designed and written by Horacio Irán Solís-Cisneros
+##### Lecturer in Software Engineering at Universidad Politécnica de Chiapas
+##### PhD. Student in Tecnológico Nacional de México campus Tuxtla Gutiérrez
+##### In order to start and complete de simulation, the entire indium content range must be provided as nk files in the same folder (named as 'refractive_index')
+###### Please name the files as x_0.1, x_0.01, etc., ensuring there are no trailing zeros after the decimal point.
+#InN
+set chi_InN= 4.7
+set nv_InN = 5.32e19
+set nc_InN = 9.16e17
+set perm_InN = 15.3
+set eg_InN = 0.7
+set mun_InN = 1000
+set mup_InN = 70
+set n_InN = 2.8
+#GaN
+set chi_GaN = 4.1
+set nv_GaN = 4.16e19
+set nc_GaN = 2.60e18
+set perm_GaN = 8.9
+set eg_GaN = 3.4
+set mun_GaN = 300
+set mup_GaN = 14
+set n_GaN = 3.3
+#Estructura
+set graded_start=0.0
+set graded_final=1.0
+set nsl=100
+set step_gl=($graded_final-$graded_start)/$nsl
+set comp_p1=0.0
+set comp_n1=1.0
+set counter1 = 1.0
+set p_doping_init = 1e18
+set n_doping_init = 1e19
+set i_doping_init = 1e17
+
+go atlas simflags="-P 16"
+set polScale=1.0
+#
+mesh auto
+#
+x.mesh loc=0.000 spac=0.050
+x.mesh loc=0.500 spac=0.010	
+x.mesh loc=1.000 spac=0.050
+set step_thickness=$graded_thick/($final_percent-1)
+region num=1 bottom thickness=$p_thick material=GaN ny=15 acceptor=$p_doping name="p-GaN"
+loop steps=$final_percent
+stmt sl=1:1		
+	region num=$sl+1 bottom thickness=$step_thickness material=InGaN donor = $i_doping ny=3 x.comp=$sl*$step_gl name="i-InGaN-$sl"
+l.end
+region num=$final_percent+2 bottom thickness=$n_thick material=InN ny=15 donor=$n_doping name="n-InN"
+electrode name=anode num=1 top x.min = 0.0 x.max=0.1
+electrode name=anode num=2 top x.min = 0.45 x.max=0.55
+electrode name=anode num=3 top x.min = 0.9 x.max=1.0
+electrode name=cathode num=4 bottom
+
+loop steps=$final_percent
+stmt sl=2:1
+	set In_content = ($sl-1)*($step_gl)
+	set chi = $In_content*$chi_InN+(1-$In_content)*$chi_GaN
+	set nv_i = $nv_InN*$In_content + $nv_GaN*(1-$In_content) 
+	set nc_i = $nc_InN*$In_content + $nc_GaN*(1-$In_content) 
+	set perm_i = $perm_InN*$In_content + $perm_GaN*(1-$In_content) 
+	set eg_i = $eg_InN*$In_content + $eg_GaN*(1-$In_content) 
+	set ni_i = $n_doping*$In_content + $n_doping*(1-$In_content) 
+	set mun_i = $mup_InN*$In_content + $mun_GaN*(1-$In_content) 
+	material region=$sl index.file="refractive_index2/x_$'In_content'.nk" affinity = $chi permittivity = $perm_i eg300 = $eg_i nc300=$nc_i nv300 = $nv_i 
+l.end
+
+material region = 1 index.file = "refractive_index2/x_0.nk" affinity = $chi_GaN permittivity = $perm_GaN eg300 = $eg_GaN nc300=$nc_GaN nv300 = $nv_GaN
+material region = $final_percent+2 index.file = "refractive_index/x_1.nk" affinity = $chi_InN permittivity = $perm_InN eg300 = $eg_InN nc300=$nc_InN nv300 = $nv_InN 
+
+material material=InGaN taun0=8e-9 taup0=8e-9 copt=2e-11 augn=1.62e-30 augp=1.62e-30
+material material=InGaN edb = 0.040 eab = 0.200
+
+models srh conmob fermi bgn optr auger print incomplete ni.fermi
+solve
+output opt.intens con.band val.band band.param qfn qfp 
+
+save outf=SC_STR_V0_$'counter1'_$'p_thick'_$'p_doping'_$'graded_thick'_$'i_doping'_$'n_thick'_$'n_doping'_$'final_percent'.str
+
+beam num=1 angle=90 x.origin=0.5 y.origin=-0.5 am1.5 wavel.start=0.3 wavel.end=2.000 wavel.num = 340
+solve b1=0.01
+solve b1=0.10
+solve b1=1.00
+
+log outf=IV_LIGHT_$'counter1'_$'p_thick'_$'p_doping'_$'graded_thick'_$'i_doping'_$'n_thick'_$'n_doping'_$'final_percent'.log
+set v_final = 0.8
+solve name=anode vanode=0 vstep=0.01 vfinal=$v_final
